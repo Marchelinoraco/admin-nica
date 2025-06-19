@@ -4,6 +4,7 @@ import React, { useState, ChangeEvent } from "react";
 import axios from "axios";
 import Papa from "papaparse";
 
+// Interface
 interface Metrics {
   accuracy: number;
   precision: number;
@@ -27,9 +28,19 @@ interface PreviewRow {
   full_text: string;
 }
 
+// Modal Loading Component
+const LoadingModal = () => {
+  return (
+    <div className="fixed inset-0 z-50 bg-white/75 flex items-center justify-center">
+      <div className="bg-white p-6 rounded shadow-lg flex flex-col items-center gap-4">
+        <div className="animate-spin rounded-full h-12 w-12 border-t-4 border-blue-500 border-solid" />
+        <p className="text-sm font-medium text-gray-700">Memproses data...</p>
+      </div>
+    </div>
+  );
+};
+
 const AdminPanel: React.FC = () => {
-  const [preprocessed, setPreprocessed] = useState<PreviewRow[]>([]);
-  const [showPreprocessed, setShowPreprocessed] = useState(false);
   const [data, setData] = useState<string[][]>([]);
   const [metrics, setMetrics] = useState<Metrics | null>(null);
   const [report, setReport] = useState<Record<string, ReportItem> | null>(null);
@@ -38,16 +49,10 @@ const AdminPanel: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const [page, setPage] = useState(0);
   const [file, setFile] = useState<File | null>(null);
-
   const [message, setMessage] = useState("");
 
   const [editableRawData, setEditableRawData] = useState<string[][]>([]);
-
-  const [editableData, setEditableData] = useState<
-    { full_text: string; emotion: string }[]
-  >([]);
-  const [preview, setPreview] = useState(null);
-  const [datasetCount, setDatasetCount] = useState<number>(0);
+  const [preprocessingPreview, setPreprocessingPreview] = useState<any[]>([]);
 
   const perPage = 20;
   const totalData = editableRawData.length;
@@ -65,7 +70,6 @@ const AdminPanel: React.FC = () => {
         const filtered = parsed.filter((row) => row.length && row[0]);
         setData(filtered);
         setEditableRawData(filtered);
-        setEditableData([]);
         setPage(0);
       },
       error: (error) => console.error("Parsing error:", error),
@@ -83,16 +87,14 @@ const AdminPanel: React.FC = () => {
     setEditableRawData(updated);
   };
 
-  const fetchPreview = async () => {
+  const fetchPreprocessed = async () => {
     setLoading(true);
     try {
-      const res = await axios.get("http://127.0.0.1:5000/admin/preview");
-      setPreview(res.data);
-      setDatasetCount(merged.length);
-      setMessage("");
-    } catch (error) {
+      const res = await axios.get("http://127.0.0.1:5000/admin/preprocessed");
+      setPreprocessingPreview(res.data);
+    } catch (err: any) {
       setMessage(
-        error.response?.data?.error || "Gagal mendapatkan preview data"
+        err.response?.data?.error || "Gagal mengambil data pra-pemrosesan"
       );
     } finally {
       setLoading(false);
@@ -120,8 +122,8 @@ const AdminPanel: React.FC = () => {
   };
 
   return (
-    <div className="p-6 max-w-5xl mx-auto">
-      <h2 className="text-2xl font-bold mb-4">Admin Panel</h2>
+    <div className="p-6 max-w-6xl mx-auto">
+      <h2 className="text-4xl font-bold mb-4 text-center">Evaluasi Model</h2>
 
       <div className="flex justify-between mb-4">
         <div>
@@ -215,59 +217,56 @@ const AdminPanel: React.FC = () => {
             Next
           </button>
           <button
-            onClick={fetchPreview}
-            className="bg-gray-700 text-white px-4 py-1 rounded"
+            onClick={fetchPreprocessed}
+            className="bg-blue-700 text-white px-4 py-1 rounded mt-4"
           >
-            Pra-pemrosesan
+            Lihat Hasil Pra-pemrosesan
           </button>
         </div>
       </div>
 
-      {preview && (
-        <div className="mt-8">
-          <h3 className="text-lg font-semibold mb-2">Preview Data</h3>
-
-          <div className="mb-4">
-            <h4 className="font-semibold">Head</h4>
-            <table className="w-full text-sm border mb-2">
-              <thead>
+      {/* Preview Pra-pemrosesan */}
+      {preprocessingPreview.length > 0 && (
+        <div className="mt-10">
+          <h3 className="text-xl font-semibold mb-3">Preview Pra-pemrosesan</h3>
+          <div className="overflow-auto">
+            <table className="w-full text-sm border-collapse border">
+              <thead className="bg-gray-200">
                 <tr>
-                  <th className="border px-2 py-1">Emotion</th>
                   <th className="border px-2 py-1">Full Text</th>
+                  <th className="border px-2 py-1">Clean</th>
+                  <th className="border px-2 py-1">Casefolding</th>
+                  <th className="border px-2 py-1">Slangword Fix</th>
+                  <th className="border px-2 py-1">Tokenizing</th>
+                  <th className="border px-2 py-1">Stopword</th>
+                  <th className="border px-2 py-1">Final Text</th>
                 </tr>
               </thead>
               <tbody>
-                {preview.head.map((row, i) => (
+                {preprocessingPreview.map((item, i) => (
                   <tr key={i}>
-                    <td className="border px-2 py-1">{row.emotion}</td>
-                    <td className="border px-2 py-1">{row.full_text}</td>
+                    <td className="border px-2 py-1">{item.full_text}</td>
+                    <td className="border px-2 py-1">{item.text_clean}</td>
+                    <td className="border px-2 py-1">
+                      {item.text_casefoldingText}
+                    </td>
+                    <td className="border px-2 py-1">{item.text_slangwords}</td>
+                    <td className="border px-2 py-1">
+                      {item.text_token.join(" ")}
+                    </td>
+                    <td className="border px-2 py-1">
+                      {item.text_stop.join(" ")}
+                    </td>
+                    <td className="border px-2 py-1">{item.text_final}</td>
                   </tr>
                 ))}
               </tbody>
             </table>
           </div>
-
-          <div>
-            <h4 className="font-semibold">Tail</h4>
-            <table className="w-full text-sm border">
-              <thead>
-                <tr>
-                  <th className="border px-2 py-1">Emotion</th>
-                  <th className="border px-2 py-1">Full Text</th>
-                </tr>
-              </thead>
-              <tbody>
-                {preview.tail.map((row, i) => (
-                  <tr key={i}>
-                    <td className="border px-2 py-1">{row.emotion}</td>
-                    <td className="border px-2 py-1">{row.full_text}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+          <div className="flex justify-end">
             <button
               onClick={trainModel}
-              className="bg-green-700 text-white px-4 py-1 rounded"
+              className="bg-green-700 text-white px-4 py-1 rounded mt-4"
             >
               Train Model
             </button>
@@ -275,12 +274,11 @@ const AdminPanel: React.FC = () => {
         </div>
       )}
 
+      {/* Evaluasi Model */}
       {(metrics || confusionMatrix) && (
         <div className="mt-10">
           <h3 className="text-2xl font-bold mb-4">Evaluasi Model</h3>
-          <div>
-            <p className="text-sm">Total Data: {totalData}</p>
-          </div>
+          <p className="text-sm my-2">Total Data: {totalData}</p>
 
           {confusionMatrix && (
             <div className="mb-8 border rounded overflow-auto">
@@ -340,6 +338,9 @@ const AdminPanel: React.FC = () => {
           )}
         </div>
       )}
+
+      {/* Modal Loading */}
+      {loading && <LoadingModal />}
     </div>
   );
 };
