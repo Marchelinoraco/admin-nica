@@ -1,7 +1,7 @@
 import { SidebarProvider, SidebarInset } from "@/components/ui/sidebar";
 import { AppSidebar } from "@/components/app-sidebar";
 import { SiteHeader } from "@/components/site-header";
-import AdminPanel from "@/components/adminPanel/adminPanel";
+
 
 export default function Page() {
   return (

@@ -76,6 +76,34 @@ const AdminPanel: React.FC = () => {
     });
   };
 
+  const uploadToAPI = async () => {
+    if (!file) {
+      setMessage("Tidak ada file yang dipilih");
+      return;
+    }
+
+    const formData = new FormData();
+    formData.append("file", file);
+
+    setLoading(true);
+    try {
+      const res = await axios.post(
+        "http://127.0.0.1:5001/admin/upload",
+        formData,
+        {
+          headers: {
+            "Content-Type": "multipart/form-data",
+          },
+        }
+      );
+      setMessage(res.data.message || "Berhasil upload ke server");
+    } catch (err: any) {
+      setMessage(err.response?.data?.error || "Gagal upload ke server");
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const handleRawEdit = (
     rowIndex: number,
     columnIndex: number,
@@ -90,7 +118,7 @@ const AdminPanel: React.FC = () => {
   const fetchPreprocessed = async () => {
     setLoading(true);
     try {
-      const res = await axios.get("http://127.0.0.1:5000/admin/preprocessed");
+      const res = await axios.get("http://127.0.0.1:5001/admin/preprocessed");
       setPreprocessingPreview(res.data);
     } catch (err: any) {
       setMessage(
@@ -105,7 +133,7 @@ const AdminPanel: React.FC = () => {
     setLoading(true);
     setMessage("");
     try {
-      const res = await axios.post("http://127.0.0.1:5000/admin/train");
+      const res = await axios.post("http://127.0.0.1:5001/admin/train");
       setMessage(res.data.message || "Training selesai");
       setMetrics({
         accuracy: res.data.accuracy,
@@ -128,9 +156,11 @@ const AdminPanel: React.FC = () => {
       <div className="flex justify-between mb-4">
         <div>
           <h2 className="text-xl font-bold">Dataset Mentah</h2>
+          {message && <p className="text-sm text-red-600 mt-1">{message}</p>}
+
           <p className="text-sm">Total Data: {totalData}</p>
         </div>
-        <div>
+        <div className="flex gap-2">
           <input
             type="file"
             accept=".csv"
@@ -142,8 +172,15 @@ const AdminPanel: React.FC = () => {
             htmlFor="upload"
             className="bg-gray-700 text-white px-4 py-2 rounded cursor-pointer"
           >
-            Unggah CSV
+            Pilih CSV
           </label>
+          <button
+            onClick={uploadToAPI}
+            className="bg-green-700 text-white px-4 py-2 rounded"
+            disabled={!file}
+          >
+            Upload Dataset ke API
+          </button>
         </div>
       </div>
 
@@ -178,13 +215,13 @@ const AdminPanel: React.FC = () => {
                   className="w-full px-1 py-1 border rounded"
                 >
                   <option value="">-- Pilih Emosi --</option>
-                  <option value="joy">Joy</option>
-                  <option value="sadness">Sadness</option>
-                  <option value="anger">Anger</option>
-                  <option value="trust">Trust</option>
-                  <option value="fear">Fear</option>
-                  <option value="surprise">Surprise</option>
-                  <option value="disgust">Disgust</option>
+                  <option value="joy">senang</option>
+                  <option value="sadness">sedih</option>
+                  <option value="anger">marah</option>
+                  <option value="trust">percaya</option>
+                  <option value="fear">takut</option>
+                  <option value="surprise">terkejut</option>
+                  <option value="neutral">netral</option>
                 </select>
               </td>
             </tr>
@@ -233,29 +270,31 @@ const AdminPanel: React.FC = () => {
             <table className="w-full text-sm border-collapse border">
               <thead className="bg-gray-200">
                 <tr>
-                  <th className="border px-2 py-1">Full Text</th>
-                  <th className="border px-2 py-1">Clean</th>
+                  <th className="border px-2 py-1">Komentar Asli</th>
                   <th className="border px-2 py-1">Casefolding</th>
-                  <th className="border px-2 py-1">Slangword Fix</th>
                   <th className="border px-2 py-1">Tokenizing</th>
+                  <th className="border px-2 py-1">Clean</th>
                   <th className="border px-2 py-1">Stopword</th>
-                  <th className="border px-2 py-1">Final Text</th>
+                  <th className="border px-2 py-1">Steamming</th>
+                  <th className="border px-2 py-1">Setelah Pra-pemrosesan</th>
                 </tr>
               </thead>
               <tbody>
                 {preprocessingPreview.map((item, i) => (
                   <tr key={i}>
                     <td className="border px-2 py-1">{item.full_text}</td>
-                    <td className="border px-2 py-1">{item.text_clean}</td>
                     <td className="border px-2 py-1">
                       {item.text_casefoldingText}
                     </td>
-                    <td className="border px-2 py-1">{item.text_slangwords}</td>
                     <td className="border px-2 py-1">
                       {item.text_token.join(" ")}
                     </td>
+                    <td className="border px-2 py-1">{item.text_clean}</td>
                     <td className="border px-2 py-1">
                       {item.text_stop.join(" ")}
+                    </td>
+                    <td className="border px-2 py-1">
+                      {item.text_steming.join(" ")}
                     </td>
                     <td className="border px-2 py-1">{item.text_final}</td>
                   </tr>
