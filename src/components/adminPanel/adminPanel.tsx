@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, ChangeEvent } from "react";
+import React, { useState } from "react";
 import axios from "axios";
 import Papa from "papaparse";
 
@@ -10,49 +10,84 @@ interface Metrics {
   precision: number;
   recall: number;
 }
-
 interface ReportItem {
   precision: number;
   recall: number;
   "f1-score": number;
   support: number;
 }
-
 interface ConfusionMatrix {
   labels: string[];
   matrix: number[][];
 }
+const labelTranslations: Record<string, string> = {
+  joy: "Senang",
+  sadness: "Sedih",
+  anger: "Marah",
+  trust: "Percaya",
+  fear: "Takut",
+  surprise: "Terkejut",
+  neutral: "Netral",
+};
 
-interface PreviewRow {
-  emotion: string;
-  full_text: string;
-}
+const LoadingModal = () => (
+  <div className="fixed inset-0 z-50 bg-white/80 flex items-center justify-center">
+    <div className="bg-white p-6 rounded shadow-lg flex flex-col items-center gap-4">
+      <div className="animate-spin rounded-full h-12 w-12 border-t-4 border-blue-500 border-solid" />
+      <p className="text-sm font-medium text-gray-700">Memproses data...</p>
+    </div>
+  </div>
+);
 
-// Modal Loading Component
-const LoadingModal = () => {
+const NotificationModal = ({
+  message,
+  onClose,
+}: {
+  message: string;
+  onClose: () => void;
+}) => {
   return (
-    <div className="fixed inset-0 z-50 bg-white/75 flex items-center justify-center">
-      <div className="bg-white p-6 rounded shadow-lg flex flex-col items-center gap-4">
-        <div className="animate-spin rounded-full h-12 w-12 border-t-4 border-blue-500 border-solid" />
-        <p className="text-sm font-medium text-gray-700">Memproses data...</p>
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30">
+      <div className="bg-white shadow-xl rounded-lg max-w-md w-full p-6 border border-gray-200 relative animate-fade-in-up">
+        <button
+          onClick={onClose}
+          className="absolute top-2 right-3 text-gray-400 hover:text-red-500 text-lg font-bold"
+        >
+          &times;
+        </button>
+        <div className="text-center">
+          <div className="text-lg font-semibold text-gray-800 mb-2">
+            Notifikasi
+          </div>
+          <p className="text-sm text-gray-700">{message}</p>
+        </div>
       </div>
     </div>
   );
 };
 
+const orderedLabels = [
+  "joy",
+  "trust",
+  "surprise",
+  "neutral",
+  "fear",
+  "sadness",
+  "anger",
+];
+
 const AdminPanel: React.FC = () => {
   const [data, setData] = useState<string[][]>([]);
   const [metrics, setMetrics] = useState<Metrics | null>(null);
-  const [report, setReport] = useState<Record<string, ReportItem> | null>(null);
   const [confusionMatrix, setConfusionMatrix] =
     useState<ConfusionMatrix | null>(null);
   const [loading, setLoading] = useState(false);
   const [page, setPage] = useState(0);
   const [file, setFile] = useState<File | null>(null);
   const [message, setMessage] = useState("");
-
   const [editableRawData, setEditableRawData] = useState<string[][]>([]);
   const [preprocessingPreview, setPreprocessingPreview] = useState<any[]>([]);
+  const [splitRatio, setSplitRatio] = useState(0.8);
 
   const perPage = 20;
   const totalData = editableRawData.length;
@@ -91,9 +126,7 @@ const AdminPanel: React.FC = () => {
         "http://127.0.0.1:5001/admin/upload",
         formData,
         {
-          headers: {
-            "Content-Type": "multipart/form-data",
-          },
+          headers: { "Content-Type": "multipart/form-data" },
         }
       );
       setMessage(res.data.message || "Berhasil upload ke server");
@@ -121,9 +154,7 @@ const AdminPanel: React.FC = () => {
       const res = await axios.get("http://127.0.0.1:5001/admin/preprocessed");
       setPreprocessingPreview(res.data);
     } catch (err: any) {
-      setMessage(
-        err.response?.data?.error || "Gagal mengambil data pra-pemrosesan"
-      );
+      setMessage(err.response?.data?.error || "Gagal mengambil data");
     } finally {
       setLoading(false);
     }
@@ -133,14 +164,15 @@ const AdminPanel: React.FC = () => {
     setLoading(true);
     setMessage("");
     try {
-      const res = await axios.post("http://127.0.0.1:5001/admin/train");
+      const res = await axios.post("http://127.0.0.1:5001/admin/train", {
+        split_ratio: splitRatio,
+      });
       setMessage(res.data.message || "Training selesai");
       setMetrics({
         accuracy: res.data.accuracy,
         precision: res.data.precision,
         recall: res.data.recall,
       });
-      setReport(res.data.report);
       setConfusionMatrix(res.data.confusion_matrix);
     } catch (err: any) {
       setMessage(err.response?.data?.error || "Gagal training.");
@@ -150,235 +182,269 @@ const AdminPanel: React.FC = () => {
   };
 
   return (
-    <div className="p-6 max-w-6xl mx-auto">
-      <h2 className="text-4xl font-bold mb-4 text-center">Evaluasi Model</h2>
+    <div className="p-6 space-y-10">
+      <h1 className="text-4xl font-bold text-center text-gray-800">
+        Evaluasi Model Emosi
+      </h1>
 
-      <div className="flex justify-between mb-4">
-        <div>
-          <h2 className="text-xl font-bold">Dataset Mentah</h2>
-          {message && <p className="text-sm text-red-600 mt-1">{message}</p>}
+      {/* Section: Dataset Mentah */}
+      <section className="bg-white shadow rounded-xl p-6 border border-gray-200">
+        <div className="flex justify-between mb-4 items-center">
+          <div>
+            <h2 className="text-xl font-semibold text-gray-800">
+              📄 Dataset Mentah
+            </h2>
+            {message && (
+              <NotificationModal
+                message={message}
+                onClose={() => setMessage("")}
+              />
+            )}
 
-          <p className="text-sm">Total Data: {totalData}</p>
+            <p className="text-sm text-gray-600">Total Data: {totalData}</p>
+          </div>
+          <div className="flex gap-2">
+            <input
+              type="file"
+              accept=".csv"
+              onChange={handleCSVUpload}
+              className="hidden"
+              id="upload"
+            />
+            <label
+              htmlFor="upload"
+              className="bg-indigo-600 text-white px-4 py-2 rounded cursor-pointer hover:bg-indigo-700 transition"
+            >
+              Pilih CSV
+            </label>
+            <button
+              onClick={uploadToAPI}
+              className="bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700 transition"
+              disabled={!file}
+            >
+              Upload Dataset
+            </button>
+          </div>
         </div>
-        <div className="flex gap-2">
-          <input
-            type="file"
-            accept=".csv"
-            onChange={handleCSVUpload}
-            className="hidden"
-            id="upload"
-          />
-          <label
-            htmlFor="upload"
-            className="bg-gray-700 text-white px-4 py-2 rounded cursor-pointer"
-          >
-            Pilih CSV
-          </label>
-          <button
-            onClick={uploadToAPI}
-            className="bg-green-700 text-white px-4 py-2 rounded"
-            disabled={!file}
-          >
-            Upload Dataset ke API
-          </button>
+
+        <div className="overflow-auto border rounded">
+          <table className="w-full text-sm">
+            <thead className="bg-gray-100">
+              <tr>
+                <th className="border px-2 py-2">No.</th>
+                <th className="border px-2 py-2">Komentar</th>
+                <th className="border px-2 py-2">Label Emosi</th>
+              </tr>
+            </thead>
+            <tbody>
+              {editableRawData.slice(start, end).map((row, idx) => (
+                <tr key={idx} className="hover:bg-gray-50">
+                  <td className="border px-2 py-1 text-center">
+                    {start + idx + 1}
+                  </td>
+                  <td className="border px-2 py-1">
+                    <input
+                      value={row[0] || ""}
+                      onChange={(e) =>
+                        handleRawEdit(start + idx, 0, e.target.value)
+                      }
+                      className="w-full border rounded px-2 py-1"
+                    />
+                  </td>
+                  <td className="border px-2 py-1">
+                    <select
+                      value={row[1] || ""}
+                      onChange={(e) =>
+                        handleRawEdit(start + idx, 1, e.target.value)
+                      }
+                      className="w-full border rounded px-2 py-1"
+                    >
+                      <option value="">-- Pilih Emosi --</option>
+                      <option value="joy">senang</option>
+                      <option value="sadness">sedih</option>
+                      <option value="anger">marah</option>
+                      <option value="trust">percaya</option>
+                      <option value="fear">takut</option>
+                      <option value="surprise">terkejut</option>
+                      <option value="neutral">netral</option>
+                    </select>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
         </div>
-      </div>
 
-      {/* Tabel Dataset Mentah */}
-      <table className="w-full border text-sm">
-        <thead className="bg-gray-200">
-          <tr>
-            <th className="border px-2">No.</th>
-            <th className="border px-2">Komentar</th>
-            <th className="border px-2">Label Emosi</th>
-          </tr>
-        </thead>
-        <tbody>
-          {editableRawData.slice(start, end).map((row, idx) => (
-            <tr key={idx}>
-              <td className="border px-2 text-center">{start + idx + 1}</td>
-              <td className="border px-2">
-                <input
-                  value={row[0] || ""}
-                  onChange={(e) =>
-                    handleRawEdit(start + idx, 0, e.target.value)
-                  }
-                  className="w-full px-1 py-1 border rounded"
-                />
-              </td>
-              <td className="border px-2">
-                <select
-                  value={row[1] || ""}
-                  onChange={(e) =>
-                    handleRawEdit(start + idx, 1, e.target.value)
-                  }
-                  className="w-full px-1 py-1 border rounded"
-                >
-                  <option value="">-- Pilih Emosi --</option>
-                  <option value="joy">senang</option>
-                  <option value="sadness">sedih</option>
-                  <option value="anger">marah</option>
-                  <option value="trust">percaya</option>
-                  <option value="fear">takut</option>
-                  <option value="surprise">terkejut</option>
-                  <option value="neutral">netral</option>
-                </select>
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-
-      {/* Navigasi */}
-      <div className="flex justify-between items-center mt-4">
-        <span className="text-sm">
-          {page + 1}/{Math.ceil(totalData / perPage)}
-        </span>
-        <div className="flex gap-2">
-          <button
-            onClick={() => setPage((p) => Math.max(p - 1, 0))}
-            disabled={page === 0}
-            className="px-3 py-1 bg-gray-300 rounded disabled:opacity-50"
-          >
-            Prev
-          </button>
-          <button
-            onClick={() =>
-              setPage((p) =>
-                p + 1 < Math.ceil(totalData / perPage) ? p + 1 : p
-              )
-            }
-            disabled={page + 1 >= Math.ceil(totalData / perPage)}
-            className="px-3 py-1 bg-gray-300 rounded disabled:opacity-50"
-          >
-            Next
-          </button>
-          <button
-            onClick={fetchPreprocessed}
-            className="bg-blue-700 text-white px-4 py-1 rounded mt-4"
-          >
-            Lihat Hasil Pra-pemrosesan
-          </button>
+        {/* Navigasi Page */}
+        <div className="flex justify-between mt-4 items-center">
+          <span className="text-sm">
+            Halaman {page + 1} dari {Math.ceil(totalData / perPage)}
+          </span>
+          <div className="flex gap-2">
+            <button
+              onClick={() => setPage((p) => Math.max(p - 1, 0))}
+              disabled={page === 0}
+              className="px-3 py-1 bg-gray-300 rounded disabled:opacity-50"
+            >
+              Prev
+            </button>
+            <button
+              onClick={() =>
+                setPage((p) =>
+                  p + 1 < Math.ceil(totalData / perPage) ? p + 1 : p
+                )
+              }
+              disabled={page + 1 >= Math.ceil(totalData / perPage)}
+              className="px-3 py-1 bg-gray-300 rounded disabled:opacity-50"
+            >
+              Next
+            </button>
+            <button
+              onClick={fetchPreprocessed}
+              className="bg-blue-600 text-white px-4 py-1 rounded hover:bg-blue-700 transition"
+            >
+              Lihat Pra-pemrosesan
+            </button>
+          </div>
         </div>
-      </div>
+      </section>
 
-      {/* Preview Pra-pemrosesan */}
+      {/* Section: Pra-pemrosesan */}
       {preprocessingPreview.length > 0 && (
-        <div className="mt-10">
-          <h3 className="text-xl font-semibold mb-3">Preview Pra-pemrosesan</h3>
-          <div className="overflow-auto">
-            <table className="w-full text-sm border-collapse border">
-              <thead className="bg-gray-200">
+        <section className="bg-white shadow rounded-xl p-6 border border-gray-200">
+          <h2 className="text-xl font-semibold mb-4 text-gray-800">
+            ⚙️ Preview Pra-pemrosesan
+          </h2>
+          <div className="overflow-x-auto border rounded">
+            <table className="w-full text-sm">
+              <thead className="bg-gray-100">
                 <tr>
-                  <th className="border px-2 py-1">Komentar Asli</th>
-                  <th className="border px-2 py-1">Casefolding</th>
-                  <th className="border px-2 py-1">Tokenizing</th>
-                  <th className="border px-2 py-1">Clean</th>
-                  <th className="border px-2 py-1">Stopword</th>
-                  <th className="border px-2 py-1">Steamming</th>
-                  <th className="border px-2 py-1">Setelah Pra-pemrosesan</th>
+                  <th className="border px-2 py-2">Komentar Asli</th>
+                  <th className="border px-2 py-2">Casefolding</th>
+                  <th className="border px-2 py-2">Tokenizing</th>
+                  <th className="border px-2 py-2">Clean</th>
+                  <th className="border px-2 py-2">Stopword</th>
+                  <th className="border px-2 py-2">Steamming</th>
+                  <th className="border px-2 py-2">Setelah Final</th>
                 </tr>
               </thead>
               <tbody>
                 {preprocessingPreview.map((item, i) => (
-                  <tr key={i}>
-                    <td className="border px-2 py-1">{item.full_text}</td>
-                    <td className="border px-2 py-1">
+                  <tr key={i} className="hover:bg-gray-50">
+                    <td className="border px-2 py-2">{item.full_text}</td>
+                    <td className="border px-2 py-2">
                       {item.text_casefoldingText}
                     </td>
-                    <td className="border px-2 py-1">
-                      {item.text_token.join(" ")}
+                    <td className="border px-2 py-2">
+                      {item.text_token?.join(" ")}
                     </td>
-                    <td className="border px-2 py-1">{item.text_clean}</td>
-                    <td className="border px-2 py-1">
-                      {item.text_stop.join(" ")}
+                    <td className="border px-2 py-2">{item.text_clean}</td>
+                    <td className="border px-2 py-2">
+                      {item.text_stop?.join(" ")}
                     </td>
-                    <td className="border px-2 py-1">
-                      {item.text_steming.join(" ")}
+                    <td className="border px-2 py-2">
+                      {item.text_steming?.join(" ")}
                     </td>
-                    <td className="border px-2 py-1">{item.text_final}</td>
+                    <td className="border px-2 py-2">{item.text_final}</td>
                   </tr>
                 ))}
               </tbody>
             </table>
           </div>
-          <div className="flex justify-end">
+
+          {/* Split Ratio + Train */}
+          <div className="flex flex-col sm:flex-row justify-between mt-6 gap-3 items-center">
+            <div className="flex items-center gap-2">
+              <label className="text-sm font-medium">Pilih Split Rasio:</label>
+              <select
+                value={splitRatio}
+                onChange={(e) => setSplitRatio(parseFloat(e.target.value))}
+                className="border px-3 py-1 rounded"
+              >
+                <option value={0.6}>60% Training / 40% Test</option>
+                <option value={0.7}>70% Training / 30% Test</option>
+                <option value={0.8}>80% Training / 20% Test</option>
+                <option value={0.9}>90% Training / 10% Test</option>
+              </select>
+            </div>
             <button
               onClick={trainModel}
-              className="bg-green-700 text-white px-4 py-1 rounded mt-4"
+              className="bg-emerald-600 text-white px-6 py-2 rounded hover:bg-emerald-700 transition"
             >
-              Train Model
+              🔁 Train Model
             </button>
           </div>
-        </div>
+        </section>
       )}
 
-      {/* Evaluasi Model */}
-      {(metrics || confusionMatrix) && (
-        <div className="mt-10">
-          <h3 className="text-2xl font-bold mb-4">Evaluasi Model</h3>
-          <p className="text-sm my-2">Total Data: {totalData}</p>
+      {/* Section: Evaluasi */}
+      {metrics && confusionMatrix && (
+        <section className="bg-white shadow rounded-xl p-6 border border-gray-200">
+          <h2 className="text-xl font-semibold mb-4 text-gray-800">
+            📊 Evaluasi Model
+          </h2>
 
-          {confusionMatrix && (
-            <div className="mb-8 border rounded overflow-auto">
-              <div className="bg-gray-300 text-center font-semibold py-2">
-                Confusion Matrix
-              </div>
-              <table className="w-full text-sm text-center border-collapse">
-                <thead>
-                  <tr>
-                    <th className="border px-2 py-1 bg-gray-100">Label</th>
-                    {confusionMatrix.labels.map((label, i) => (
-                      <th key={i} className="border px-2 py-1 bg-gray-100">
-                        {label}
-                      </th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {confusionMatrix.matrix.map((row, i) => (
-                    <tr key={i}>
-                      <td className="border px-2 py-1 bg-gray-100 font-semibold">
-                        {confusionMatrix.labels[i]}
-                      </td>
-                      {row.map((val, j) => (
-                        <td key={j} className="border px-2 py-1">
-                          {val}
-                        </td>
-                      ))}
-                    </tr>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6 text-center">
+            <div className="bg-gray-100 p-4 rounded">
+              <h3 className="font-semibold text-gray-700 mb-2">Akurasi</h3>
+              <p className="text-xl font-bold text-green-700">
+                {(metrics.accuracy * 100).toFixed(2)}%
+              </p>
+            </div>
+            <div className="bg-gray-100 p-4 rounded">
+              <h3 className="font-semibold text-gray-700 mb-2">Presisi</h3>
+              <p className="text-xl font-bold text-blue-700">
+                {(metrics.precision * 100).toFixed(2)}%
+              </p>
+            </div>
+            <div className="bg-gray-100 p-4 rounded">
+              <h3 className="font-semibold text-gray-700 mb-2">Recall</h3>
+              <p className="text-xl font-bold text-purple-700">
+                {(metrics.recall * 100).toFixed(2)}%
+              </p>
+            </div>
+          </div>
+
+          <div className="mt-6 overflow-x-auto">
+            <table className="w-full text-sm text-center border-collapse border mt-4">
+              <thead className="bg-gray-200">
+                <tr>
+                  <th className="border px-2 py-1">Label</th>
+                  {orderedLabels.map((label, i) => (
+                    <th key={i} className="border px-2 py-1">
+                      {labelTranslations[label] || label}
+                    </th>
                   ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-
-          {metrics && (
-            <div className="grid grid-cols-3 gap-4 text-center mt-6">
-              <div className="border p-4 rounded bg-gray-100">
-                <h4 className="font-semibold mb-2">Akurasi</h4>
-                <div className="bg-white rounded py-2 font-bold text-lg">
-                  {(metrics.accuracy * 100).toFixed(0)}%
-                </div>
-              </div>
-              <div className="border p-4 rounded bg-gray-100">
-                <h4 className="font-semibold mb-2">Presisi</h4>
-                <div className="bg-white rounded py-2 font-bold text-lg">
-                  {(metrics.precision * 100).toFixed(0)}%
-                </div>
-              </div>
-              <div className="border p-4 rounded bg-gray-100">
-                <h4 className="font-semibold mb-2">Recall</h4>
-                <div className="bg-white rounded py-2 font-bold text-lg">
-                  {(metrics.recall * 100).toFixed(0)}%
-                </div>
-              </div>
-            </div>
-          )}
-        </div>
+                </tr>
+              </thead>
+              <tbody>
+                {orderedLabels.map((rowLabel, i) => {
+                  const rowIndex = confusionMatrix.labels.indexOf(rowLabel);
+                  const rowData = confusionMatrix.matrix[rowIndex] || [];
+                  return (
+                    <tr key={i}>
+                      <td className="border px-2 py-1 font-semibold bg-gray-100">
+                        {labelTranslations[rowLabel] || rowLabel}
+                      </td>
+                      {orderedLabels.map((colLabel, j) => {
+                        const colIndex =
+                          confusionMatrix.labels.indexOf(colLabel);
+                        const value = rowData[colIndex] ?? 0;
+                        return (
+                          <td key={j} className="border px-2 py-1">
+                            {value}
+                          </td>
+                        );
+                      })}
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        </section>
       )}
 
-      {/* Modal Loading */}
       {loading && <LoadingModal />}
     </div>
   );
