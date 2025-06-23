@@ -113,15 +113,19 @@ const data = {
   ],
   documents: [
     {
-      name: "Evaluasi Model",
+      name: "Datasets",
       url: "dataset",
       icon: IconReport,
     },
-
     {
-      name: "Proses",
-      url: "proses",
-      icon: IconDatabase,
+      name: "Pra-pemrosesan",
+      url: "pra-pemro",
+      icon: IconFileWord,
+    },
+    {
+      name: "Data Training",
+      url: "train",
+      icon: IconChartBar,
     },
     {
       name: "Validasi",

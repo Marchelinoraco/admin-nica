@@ -90,7 +90,7 @@ const Validasi: React.FC = () => {
 
   return (
     <div className="p-4 my-10 mx-10">
-      <h1 className="text-2xl font-bold mb-4">Analisis Emosi (Naive Bayes)</h1>
+      <h1 className="text-2xl font-bold mb-4">Validasi</h1>
       <textarea
         className="w-full p-3 border mb-4 rounded"
         rows={4}
