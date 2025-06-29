@@ -3,6 +3,16 @@
 import React, { useEffect, useState } from "react";
 import axios from "axios";
 
+const emotionMap: Record<string, string> = {
+  joy: "senang",
+  sadness: "sedih",
+  anger: "marah",
+  trust: "percaya",
+  fear: "takut",
+  surprise: "terkejut",
+  neutral: "netral",
+};
+
 export default function PreprocessingPage() {
   const [data, setData] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
@@ -12,6 +22,7 @@ export default function PreprocessingPage() {
     setLoading(true);
     try {
       const res = await axios.get("http://127.0.0.1:5001/admin/preprocessed");
+      console.log("📦 Data diterima:", res.data);
       setData(res.data);
     } catch (err: any) {
       setError(err.response?.data?.error || "Gagal memuat data.");
@@ -31,6 +42,7 @@ export default function PreprocessingPage() {
       </h2>
 
       {error && <p className="text-red-500">{error}</p>}
+
       {loading && (
         <div className="flex justify-center items-center py-10">
           <div className="animate-spin h-8 w-8 border-4 border-blue-500 border-t-transparent rounded-full" />
@@ -43,16 +55,18 @@ export default function PreprocessingPage() {
             <thead className="bg-gray-100">
               <tr>
                 <th className="border px-2 py-2">Komentar Asli</th>
-
-                <th className="border px-2 py-2">Hasil Pra-pemrosesan </th>
+                <th className="border px-2 py-2">Setelah Final</th>
+                <th className="border px-2 py-2">Label Emosi</th>
               </tr>
             </thead>
             <tbody>
               {data.map((item, i) => (
                 <tr key={i} className="hover:bg-gray-50">
                   <td className="border px-2 py-2">{item.full_text}</td>
-
                   <td className="border px-2 py-2">{item.text_final}</td>
+                  <td className="border px-2 py-2 capitalize">
+                    {emotionMap[item.emotion] || item.emotion}
+                  </td>
                 </tr>
               ))}
             </tbody>

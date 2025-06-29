@@ -32,7 +32,6 @@ const NotificationModal = ({
 };
 
 const Datasets: React.FC = () => {
-  const [data, setData] = useState<string[][]>([]);
   const [editableRawData, setEditableRawData] = useState<string[][]>([]);
   const [file, setFile] = useState<File | null>(null);
   const [message, setMessage] = useState("");
@@ -49,27 +48,48 @@ const Datasets: React.FC = () => {
     setFile(selectedFile);
 
     Papa.parse(selectedFile, {
+      header: true,
+      skipEmptyLines: true,
       complete: (result) => {
-        const parsed = result.data as string[][];
-        const filtered = parsed.filter((row) => row.length && row[0]);
-        setData(filtered);
+        const parsed = result.data as { [key: string]: string }[];
+
+        const rows = parsed.map((row) => {
+          const teks = row.teks?.trim() || "";
+          const emosi = row.emosi?.trim().toLowerCase() || "";
+          return [teks, emosi];
+        });
+
+        const filtered = rows.filter((row) => row[0] && row[1]);
         setEditableRawData(filtered);
         setPage(0);
       },
-      error: (error) => console.error("Parsing error:", error),
+      error: (error) => {
+        console.error("Parsing error:", error);
+        setMessage("Gagal membaca file CSV");
+      },
     });
   };
 
   const uploadToAPI = async () => {
-    if (!file) {
-      setMessage("Tidak ada file yang dipilih");
+    if (editableRawData.length === 0) {
+      setMessage("Tidak ada data untuk dikirim");
       return;
     }
 
-    const formData = new FormData();
-    formData.append("file", file);
-
     try {
+      const dataWithHeader = [["teks", "emosi"], ...editableRawData];
+
+      const csvString = Papa.unparse(dataWithHeader, {
+        quotes: true,
+        header: false,
+      });
+
+      const blob = new Blob([csvString], { type: "text/csv" });
+      const csvFile = new File([blob], "dataset.csv", { type: "text/csv" });
+
+      const formData = new FormData();
+      formData.append("file", csvFile);
+
       const res = await axios.post(
         "http://127.0.0.1:5001/admin/upload",
         formData,
@@ -77,9 +97,11 @@ const Datasets: React.FC = () => {
           headers: { "Content-Type": "multipart/form-data" },
         }
       );
-      setMessage(res.data.message || "Berhasil upload ke server");
+
+      setMessage(res.data.message || "✅ Berhasil upload ke server");
     } catch (err: any) {
-      setMessage(err.response?.data?.error || "Gagal upload ke server");
+      console.error("❌ Upload Error:", err.response?.data || err.message);
+      setMessage(err.response?.data?.error || "❌ Gagal upload ke server");
     }
   };
 
@@ -171,13 +193,13 @@ const Datasets: React.FC = () => {
                       className="w-full border rounded px-2 py-1"
                     >
                       <option value="">-- Pilih Emosi --</option>
-                      <option value="joy">senang</option>
-                      <option value="sadness">sedih</option>
-                      <option value="anger">marah</option>
-                      <option value="trust">percaya</option>
-                      <option value="fear">takut</option>
-                      <option value="surprise">terkejut</option>
-                      <option value="neutral">netral</option>
+                      <option value="senang">senang</option>
+                      <option value="sedih">sedih</option>
+                      <option value="marah">marah</option>
+                      <option value="percaya">percaya</option>
+                      <option value="takut">takut</option>
+                      <option value="terkejut">terkejut</option>
+                      <option value="netral">netral</option>
                     </select>
                   </td>
                 </tr>
